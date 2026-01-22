@@ -1,18 +1,20 @@
 /**
- * Biltone Supplies - Main Logic
+ * Biltone Supplies - Main Logic (Supabase Integrated)
  * Handles Cart, Auth, and UI interactions
  */
 
 const App = {
     state: {
         cart: [],
-        user: null
+        user: null,
+        products: [] // Store products fetched from Supabase
     },
 
     init() {
         this.loadCart();
         this.checkAuth();
         this.updateCartUI();
+        this.loadProducts(); // Load products from Supabase
     },
 
     // --- Cart System ---
@@ -31,15 +33,12 @@ const App = {
         if (existing) {
             existing.quantity += quantity;
         } else {
-            // Check for active offer
-            // No longer separate DB call needed if offers are on product object, but for now logic is inside addToCart
-            // Let's simplify addToCart to check properties directly
             const price = product.offerPrice && new Date(product.offerExpires) > new Date() ? product.offerPrice : product.price;
 
             this.state.cart.push({
                 id: product.id,
                 title: product.title,
-                price: product.offerPrice && new Date(product.offerExpires) > new Date() ? product.offerPrice : product.price,
+                price: price,
                 image: product.image,
                 quantity: quantity
             });
@@ -107,13 +106,11 @@ const App = {
     logout() {
         sessionStorage.removeItem('biltone_session');
         this.state.user = null;
-        // Check if we are in admin folder to determine correct path to index (customer home)
         const inAdmin = window.location.pathname.includes('/admin/');
         window.location.href = inAdmin ? '../index.html' : 'index.html';
     },
 
     updateAuthUI() {
-        // Show/Hide Admin links based on auth
         const adminLink = document.getElementById('admin-link');
         if (adminLink && this.state.user) {
             adminLink.href = '#';
@@ -125,15 +122,74 @@ const App = {
         }
     },
 
+    // --- Supabase Product Loader ---
+    async loadProducts() {
+        try {
+            const { data: products, error } = await supabase
+                .from('products')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            // Store products locally
+            this.state.products = products.map(p => ({
+                id: p.id,
+                title: p.title,
+                price: p.price,
+                offerPrice: p.offer_price,
+                offerExpires: p.offer_expires,
+                image: p.image_url
+            }));
+
+            this.renderFeaturedProducts();
+        } catch (err) {
+            console.error('Error loading products:', err.message);
+            const container = document.getElementById('featured-products');
+            if (container) container.innerHTML = '<div class="col-span-full text-center py-8 text-red-500">Failed to load products.</div>';
+        }
+    },
+
+    renderFeaturedProducts() {
+        const container = document.getElementById('featured-products');
+        container.innerHTML = '';
+
+        const featured = this.state.products.slice(0, 4);
+        featured.forEach(product => {
+            const hasOffer = product.offerPrice && new Date(product.offerExpires) > new Date();
+            const priceDisplay = hasOffer
+                ? `<span class="text-red-500 font-bold">${this.formatMoney(product.offerPrice)}</span> <span class="text-gray-400 line-through text-sm">${this.formatMoney(product.price)}</span>`
+                : `<span class="text-gray-900 font-bold">${this.formatMoney(product.price)}</span>`;
+
+            const card = `
+                <div class="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition group border border-gray-100">
+                    <div class="relative mb-4 overflow-hidden rounded-lg bg-gray-100 h-48">
+                        <img src="${product.image}" alt="${product.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" onerror="this.src='https://placehold.co/400x400?text=No+Image'">
+                        ${hasOffer ? '<span class="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded z-20">OFFER</span>' : ''}
+                    </div>
+                    <div class="p-4">
+                        <h3 class="font-semibold text-gray-800 mb-2 truncate">${product.title}</h3>
+                        <div class="flex justify-between items-center">
+                            <div>${priceDisplay}</div>
+                            <button onclick="App.addToCart(DB.getProduct('${product.id}'))" class="bg-primary-50 text-primary-600 p-2 rounded-full hover:bg-primary-100 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += card;
+        });
+    },
+
     // --- Utilities ---
     formatMoney(amount) {
         return 'KES ' + amount.toLocaleString();
     },
 
     showToast(message) {
-        // Simple alert for now, can be upgraded to a custom toast
-        // alert(message); 
-        // Or create a temporary DOM element
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg z-50 animate-bounce';
         toast.textContent = message;
@@ -146,3 +202,4 @@ const App = {
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
 });
+
