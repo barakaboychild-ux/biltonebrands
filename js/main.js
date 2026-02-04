@@ -26,20 +26,38 @@ const App = {
         this.updateCartUI();
     },
 
-    addToCart(product, quantity = 1) {
-        const existing = this.state.cart.find(item => item.id === product.id);
+    async addToCart(productIdOrObj, quantity = 1) {
+        let product = productIdOrObj;
+
+        // If ID passed, fetch product
+        if (typeof productIdOrObj === 'number' || typeof productIdOrObj === 'string') {
+            try {
+                product = await DB.getProduct(productIdOrObj);
+            } catch (e) {
+                console.error("Error fetching product for cart:", e);
+                this.showToast("Error adding to cart");
+                return;
+            }
+        }
+
+        if (!product) {
+            this.showToast("Product not found");
+            return;
+        }
+
+        const existing = this.state.cart.find(item => item.id == product.id);
         if (existing) {
             existing.quantity += quantity;
         } else {
             // Check for active offer
-            // No longer separate DB call needed if offers are on product object, but for now logic is inside addToCart
-            // Let's simplify addToCart to check properties directly
-            const price = product.offerPrice && new Date(product.offerExpires) > new Date() ? product.offerPrice : product.price;
+            const price = product.offer_price && product.offer_expires && new Date(product.offer_expires) > new Date()
+                ? product.offer_price
+                : product.price;
 
             this.state.cart.push({
                 id: product.id,
                 title: product.title,
-                price: product.offerPrice && new Date(product.offerExpires) > new Date() ? product.offerPrice : product.price,
+                price: parseFloat(price),
                 image: product.image,
                 quantity: quantity
             });
@@ -49,12 +67,12 @@ const App = {
     },
 
     removeFromCart(id) {
-        this.state.cart = this.state.cart.filter(item => item.id !== id);
+        this.state.cart = this.state.cart.filter(item => item.id != id);
         this.saveCart();
     },
 
     updateQuantity(id, quantity) {
-        const item = this.state.cart.find(item => item.id === id);
+        const item = this.state.cart.find(item => item.id == id);
         if (item) {
             item.quantity = parseInt(quantity);
             if (item.quantity <= 0) this.removeFromCart(id);
@@ -89,9 +107,9 @@ const App = {
         }
     },
 
-    login(email, password) {
+    async login(email, password) {
         try {
-            const user = DB.loginUser(email, password);
+            const user = await DB.loginUser(email, password);
             if (user) {
                 sessionStorage.setItem('biltone_session', JSON.stringify(user));
                 this.state.user = user;
@@ -99,7 +117,7 @@ const App = {
             }
             return false;
         } catch (e) {
-            alert(e.message);
+            alert(e.message || "Login failed");
             return false;
         }
     },
@@ -127,13 +145,10 @@ const App = {
 
     // --- Utilities ---
     formatMoney(amount) {
-        return 'KES ' + amount.toLocaleString();
+        return 'KES ' + Number(amount).toLocaleString();
     },
 
     showToast(message) {
-        // Simple alert for now, can be upgraded to a custom toast
-        // alert(message); 
-        // Or create a temporary DOM element
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg z-50 animate-bounce';
         toast.textContent = message;
@@ -146,4 +161,3 @@ const App = {
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
 });
-
