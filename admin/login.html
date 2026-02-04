@@ -8,6 +8,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="../js/tailwind.config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/config.js"></script>
     <script src="../js/db.js"></script>
     <script src="../js/main.js"></script>
 </head>
@@ -140,15 +142,17 @@
         }
 
         // Login Handler
-        document.getElementById('login-form').addEventListener('submit', (e) => {
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
 
-            if (App.login(email, password)) {
+            if (await App.login(email, password)) {
                 window.location.href = 'dashboard.html';
             } else {
-                alert("Invalid email or password. Please try again.");
+                // Alert is handled in App.login catch or return false
+                // But if it returned false (handled error), we might want to ensure user knows
+                // App.login alerts on error.
             }
         });
 
