@@ -1,258 +1,216 @@
 /**
- * Biltone Supplies - Simulated Database
- * Handles data persistence using localStorage
+ * Biltone Supplies - Supabase Database Layer
+ * Replaces localStorage with Supabase Async Calls
  */
 
-const DB_KEYS = {
-    PRODUCTS: 'biltone_products',
-    USERS: 'biltone_users',
-    ORDERS: 'biltone_orders',
-    OFFERS: 'biltone_offers',
-    CONTENT: 'biltone_content',
-    MESSAGES: 'biltone_messages',
-    PENDING_UPDATES: 'biltone_pending_updates'
-};
-
-const SEED_DATA = {
-    // ... products/users ...
-    MESSAGES: [
-        { id: 1, name: "John Doe", email: "john@example.com", message: "Do you supply wholesale?", date: new Date().toISOString(), status: 'New' }
-    ],
-    PENDING_UPDATES: [],
-    PRODUCTS: [
-        { id: 1, title: "Professional Barber Shears", price: 2500, image: "https://placehold.co/400x400?text=Shears", stock: 50, category: "Tools" },
-        { id: 2, title: "Electric Hair Clipper", price: 4500, image: "https://placehold.co/400x400?text=Clipper", stock: 30, category: "Electronics" },
-        { id: 3, title: "Beard Oil (Premium)", price: 800, image: "https://placehold.co/400x400?text=Beard+Oil", stock: 100, category: "Grooming" },
-        { id: 4, title: "Salon Cape", price: 500, image: "https://placehold.co/400x400?text=Cape", stock: 200, category: "Accessories" },
-        { id: 5, title: "Shaving Cream", price: 450, image: "https://placehold.co/400x400?text=Cream", stock: 80, category: "Grooming" },
-        { id: 6, title: "Hair Dryer", price: 3200, image: "https://placehold.co/400x400?text=Dryer", stock: 25, category: "Electronics" },
-        // New Products
-        { id: 7, title: "Black Shampoo", price: 1200, image: "https://placehold.co/400x400?text=Black+Shampoo", stock: 40, category: "Grooming" },
-        { id: 8, title: "Neck Rolls (Pack)", price: 300, image: "https://placehold.co/400x400?text=Neck+Rolls", stock: 150, category: "Accessories" },
-        { id: 9, title: "Nivea Cream (Blue Tin)", price: 450, image: "https://placehold.co/400x400?text=Nivea+Cream", stock: 60, category: "Cosmetics" },
-        { id: 10, title: "Bumsy Lotion", price: 600, image: "https://placehold.co/400x400?text=Bumsy", stock: 50, category: "Cosmetics" }
-    ],
-    USERS: [
-        // Password is 'admin123' (hashed simply for demo)
-        { email: 'owner@biltone.com', password: 'admin', role: 'owner', approved: true, name: 'System Owner' },
-        { email: 'barakaboychild@gmail.com', password: 'Wanjala@18', role: 'admin', approved: true, name: 'Baraka' }
-    ],
-    OFFERS: [
-        { id: 1, productId: 2, discountPrice: 3999, expiresAt: new Date(Date.now() + 86400000).toISOString() } // 24 hours from now
-    ],
-    CONTENT: {
-        aboutUs: "<h1>About BiltoneBrands</h1><p>BiltoneBrands is your customer based platform dedicated to providing you with affordable barber shop and beauty supplies. We provide you with cosmetics and barber shop products.</p><p>Contact us at 0115516136 on whatsapp and calls for more information.</p>"
+// Initialize Supabase
+let supabase;
+if (typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY) {
+    if (typeof createClient === 'undefined' && window.supabase && window.supabase.createClient) {
+        supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    } else if (typeof createClient !== 'undefined') {
+        supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    } else {
+        console.warn("Supabase SDK not loaded or init failed.");
     }
-};
+} else {
+    console.warn("Supabase Config missing.");
+}
 
 const DB = {
-    init() {
-        if (!localStorage.getItem(DB_KEYS.PRODUCTS)) {
-            localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(SEED_DATA.PRODUCTS));
-        }
-        if (!localStorage.getItem(DB_KEYS.USERS)) {
-            localStorage.setItem(DB_KEYS.USERS, JSON.stringify(SEED_DATA.USERS));
-        }
-        if (!localStorage.getItem(DB_KEYS.OFFERS)) {
-            localStorage.setItem(DB_KEYS.OFFERS, JSON.stringify(SEED_DATA.OFFERS));
-        }
-        if (!localStorage.getItem(DB_KEYS.CONTENT)) {
-            localStorage.setItem(DB_KEYS.CONTENT, JSON.stringify(SEED_DATA.CONTENT));
-        }
-        if (!localStorage.getItem(DB_KEYS.ORDERS)) {
-            localStorage.setItem(DB_KEYS.ORDERS, JSON.stringify([]));
-        }
-        if (!localStorage.getItem(DB_KEYS.MESSAGES)) {
-            localStorage.setItem(DB_KEYS.MESSAGES, JSON.stringify(SEED_DATA.MESSAGES));
-        }
-        if (!localStorage.getItem(DB_KEYS.PENDING_UPDATES)) {
-            localStorage.setItem(DB_KEYS.PENDING_UPDATES, JSON.stringify(SEED_DATA.PENDING_UPDATES));
-        }
+    async init() {
+        console.log("DB Init: Supabase Connected");
+        // No local storage seed needed
     },
 
     // --- Products ---
-    getProducts() {
-        return JSON.parse(localStorage.getItem(DB_KEYS.PRODUCTS) || '[]');
+    async getProducts() {
+        const { data, error } = await supabase.from('products').select('*').order('id', { ascending: false });
+        if (error) { console.error("Error fetching products:", error); return []; }
+        return data || [];
     },
-    getProduct(id) {
-        return this.getProducts().find(p => p.id == id);
+    async getProduct(id) {
+        const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
+        if (error) { console.error("Error fetching product:", error); return null; }
+        return data;
     },
-    saveProduct(product) {
-        const products = this.getProducts();
-        const index = products.findIndex(p => p.id == product.id);
-        if (index >= 0) {
-            products[index] = product;
-        } else {
-            product.id = Date.now();
-            products.push(product);
+    async saveProduct(product) {
+        // Remove ID if it's a temp/timestamp ID for new items (Supabase handles auto-increment)
+        // Or if we are using the same ID system.
+        // If product.id is a large timestamp number, treat as new insert (omit ID)
+        const isNew = product.id > 1000000; // Heuristic for timestamp ID
+
+        let payload = { ...product };
+        if (isNew) {
+            delete payload.id;
         }
-        localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(products));
+
+        const { data, error } = await supabase.from('products').upsert(payload).select();
+        if (error) throw error;
+        return data ? data[0] : null;
     },
-    deleteProduct(id) {
-        const products = this.getProducts().filter(p => p.id != id);
-        localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(products));
+    async deleteProduct(id) {
+        const { error } = await supabase.from('products').delete().eq('id', id);
+        if (error) throw error;
     },
 
-    // --- Offers ---
-    getOffers() {
-        return JSON.parse(localStorage.getItem(DB_KEYS.OFFERS) || '[]');
-    },
-    getActiveOffer(productId) {
-        const offers = this.getOffers();
-        const offer = offers.find(o => o.productId == productId);
-        if (offer && new Date(offer.expiresAt) > new Date()) {
-            return offer;
-        }
-        return null;
+    // --- Offers (Integrated in Products) ---
+    // Function to filter products with offers
+    async getOffers() {
+        const { data, error } = await supabase.from('products').select('*').not('offer_price', 'is', null);
+        if (error) return [];
+        return data.filter(p => p.offer_expires && new Date(p.offer_expires) > new Date());
     },
 
     // --- Users (Auth) ---
-    getUsers() {
-        return JSON.parse(localStorage.getItem(DB_KEYS.USERS) || '[]');
+    async getUsers() {
+        // Only feasible if we have a 'profiles' table that syncs with Auth
+        // Because client cannot list auth.users
+        const { data, error } = await supabase.from('profiles').select('*');
+        if (error) { console.error(error); return []; }
+        return data;
     },
-    updateUser(email, userData) {
-        const users = this.getUsers();
-        const index = users.findIndex(u => u.email === email);
-        if (index !== -1) {
-            users[index] = { ...users[index], ...userData };
-            localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
 
-            // Update session if it's the current user
-            const session = sessionStorage.getItem('biltone_session');
-            if (session) {
-                const currentUser = JSON.parse(session);
-                if (currentUser.email === email) {
-                    const updatedUser = { ...currentUser, ...userData };
-                    sessionStorage.setItem('biltone_session', JSON.stringify(updatedUser)); // Fix: Update session key
+    async registerUser(email, password, name) {
+        // 1. SignUp
+        const { data, error } = await supabase.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+                data: {
+                    full_name: name
                 }
             }
-            return true;
-        }
-        return false;
+        });
+        if (error) throw error;
+        // Profile creation handled by Trigger in SQL
+        return data.user;
     },
 
-    registerUser(email, password, name) {
-        const users = this.getUsers();
-        if (users.find(u => u.email === email)) {
-            throw new Error("Email already registered");
-        }
-        users.push({
-            email,
-            password, // In real app, hash this!
-            name,
-            role: 'admin',
-            approved: false
+    async loginUser(email, password) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password
         });
-        localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
+
+        if (error) throw error;
+
+        // Check Profile for Approval/Role
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+
+        if (profileError) throw profileError;
+
+        if (!profile.approved && profile.role !== 'owner') {
+            throw new Error("Account pending approval");
+        }
+
+        return {
+            ...data.user,
+            role: profile.role,
+            name: profile.full_name,
+            approved: profile.approved
+        };
     },
-    loginUser(email, password) {
-        const users = this.getUsers();
-        const user = users.find(u => u.email === email && u.password === password);
-        if (!user) return null;
-        if (!user.approved) throw new Error("Account pending approval");
-        return user;
+
+    async approveUser(email) {
+        // Find profile by email (Note: profiles table needs email column as per SQL plan)
+        const { data, error } = await supabase.from('profiles').update({ approved: true }).eq('email', email);
+        if (error) console.error(error);
     },
 
     // --- Messages ---
-    getMessages() {
-        return JSON.parse(localStorage.getItem(DB_KEYS.MESSAGES) || '[]');
+    async getMessages() {
+        const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
+        if (error) return [];
+        return data;
     },
-    saveMessage(msg) {
-        const messages = this.getMessages();
-        const newMsg = {
+    async saveMessage(msg) {
+        // Msg usually has name, email, message
+        // Add id if needed, but table handles it
+        // Supabase expects 'id' to be text? SQL said text primary key. 
+        // Let's generate one or let DB handle it if it was uuid. 
+        // My SQL said: id text primary key. So I must provide it.
+        const payload = {
             id: 'MSG-' + Date.now(),
-            date: new Date().toISOString(),
-            status: 'New',
-            ...msg
+            ...msg,
+            status: 'New'
         };
-        messages.unshift(newMsg);
-        localStorage.setItem(DB_KEYS.MESSAGES, JSON.stringify(messages));
+        const { error } = await supabase.from('messages').insert(payload);
+        if (error) console.error(error);
     },
-    markMessageRead(id) {
-        const messages = this.getMessages();
-        const msg = messages.find(m => m.id === id);
-        if (msg) {
-            msg.status = 'Read';
-            localStorage.setItem(DB_KEYS.MESSAGES, JSON.stringify(messages));
-        }
-    },
-    approveUser(email) {
-        const users = this.getUsers();
-        const user = users.find(u => u.email === email);
-        if (user) {
-            user.approved = true;
-            localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
-        }
+    async markMessageRead(id) {
+        await supabase.from('messages').update({ status: 'Read' }).eq('id', id);
     },
 
-    // --- Pending Profile Updates ---
-    getPendingUpdates() {
-        return JSON.parse(localStorage.getItem(DB_KEYS.PENDING_UPDATES) || '[]');
+    // --- Pending Updates ---
+    async getPendingUpdates() {
+        const { data, error } = await supabase.from('pending_updates').select('*');
+        if (error) return [];
+        return data;
     },
-    requestProfileUpdate(email, userData) {
-        const updates = this.getPendingUpdates();
-        updates.push({
+    async requestProfileUpdate(email, userData) {
+        const payload = {
             id: 'UPD-' + Date.now(),
             email,
-            userData,
-            date: new Date().toISOString()
-        });
-        localStorage.setItem(DB_KEYS.PENDING_UPDATES, JSON.stringify(updates));
+            userData: userData // Ensure columns match JSONB in SQL
+        };
+        await supabase.from('pending_updates').insert(payload);
     },
-    approveProfileUpdate(id) {
-        const updates = this.getPendingUpdates();
-        const updateIndex = updates.findIndex(u => u.id === id);
-        if (updateIndex !== -1) {
-            const update = updates[updateIndex];
-            // Apply Update
-            this.updateUser(update.email, update.userData);
-            // Remove from pending
-            updates.splice(updateIndex, 1);
-            localStorage.setItem(DB_KEYS.PENDING_UPDATES, JSON.stringify(updates));
-            return true;
-        }
-        return false;
+    async approveProfileUpdate(id) {
+        // 1. Get update
+        const { data: update } = await supabase.from('pending_updates').select('*').eq('id', id).single();
+        if (!update) return false;
+
+        // 2. Apply update (to Profile)
+        const { error } = await supabase.from('profiles').update({ ...update.userData }).eq('email', update.email);
+        if (error) throw error;
+
+        // 3. Delete pending
+        await supabase.from('pending_updates').delete().eq('id', id);
+        return true;
     },
-    rejectProfileUpdate(id) {
-        const updates = this.getPendingUpdates();
-        const newUpdates = updates.filter(u => u.id !== id);
-        localStorage.setItem(DB_KEYS.PENDING_UPDATES, JSON.stringify(newUpdates));
+    async rejectProfileUpdate(id) {
+        await supabase.from('pending_updates').delete().eq('id', id);
     },
 
     // --- Orders ---
-    getOrders() {
-        return JSON.parse(localStorage.getItem(DB_KEYS.ORDERS) || '[]');
+    async getOrders() {
+        const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+        if (error) return [];
+        return data;
     },
-    createOrder(orderData) {
-        const orders = this.getOrders();
+    async createOrder(orderData) {
         const newOrder = {
             id: 'ORD-' + Date.now(),
-            date: new Date().toISOString(),
             status: 'Pending',
-            ...orderData
+            total: orderData.total,
+            customer_details: orderData.customer,
+            items: orderData.items
         };
-        orders.unshift(newOrder); // Add to top
-        localStorage.setItem(DB_KEYS.ORDERS, JSON.stringify(orders));
-        return newOrder;
+        const { data, error } = await supabase.from('orders').insert(newOrder).select();
+        if (error) throw error;
+        return data[0];
     },
-    updateOrderStatus(id, status) {
-        const orders = this.getOrders();
-        const order = orders.find(o => o.id === id);
-        if (order) {
-            order.status = status;
-            localStorage.setItem(DB_KEYS.ORDERS, JSON.stringify(orders));
-        }
+    async updateOrderStatus(id, status) {
+        await supabase.from('orders').update({ status }).eq('id', id);
     },
 
     // --- Content ---
-    getContent() {
-        return JSON.parse(localStorage.getItem(DB_KEYS.CONTENT) || '{}');
+    async getContent() {
+        // Assume key 'aboutUs'
+        const { data, error } = await supabase.from('content').select('*').eq('key', 'site_content').single();
+        if (error || !data) return {};
+        return data.value || {};
     },
-    saveContent(content) {
-        localStorage.setItem(DB_KEYS.CONTENT, JSON.stringify(content));
+    async saveContent(content) {
+        const { error } = await supabase.from('content').upsert({ key: 'site_content', value: content });
+        if (error) console.error(error);
     }
 };
 
-// Initialize on load
-DB.init();
-
+// Auto-init?
+// DB.init();
