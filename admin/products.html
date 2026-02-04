@@ -7,7 +7,9 @@
     <title>Manage Products | BiltoneBrands</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../js/tailwind.config.js"></script>
+    <script src="../js/config.js"></script>
     <script src="../js/db.js"></script>
     <script src="../js/main.js"></script>
 </head>
@@ -162,9 +164,11 @@
 
     <script>
         // Auth Check
-        const user = JSON.parse(sessionStorage.getItem('biltone_session'));
+        const session = sessionStorage.getItem('biltone_session');
+        const user = session ? JSON.parse(session) : null;
         if (!user) window.location.href = 'login.html';
-        if (user.role === 'owner') {
+
+        if (user && user.role === 'owner') {
             document.getElementById('users-link').classList.remove('hidden');
             const contentLink = document.getElementById('content-link');
             if (contentLink) contentLink.classList.remove('hidden');
@@ -172,36 +176,45 @@
             if (ordersLink) ordersLink.classList.add('hidden');
         }
 
-        function renderProducts() {
-            const products = DB.getProducts();
-            const tbody = document.getElementById('products-table');
-            tbody.innerHTML = '';
+        async function renderProducts() {
+            try {
+                const products = await DB.getProducts();
+                const tbody = document.getElementById('products-table');
+                tbody.innerHTML = '';
 
-            products.forEach(p => {
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-gray-50';
-                tr.innerHTML = `
-                    <td class="px-6 py-4"><img src="${p.image}" class="w-10 h-10 rounded object-cover bg-gray-100" onerror="this.src='https://placehold.co/100x100?text=NA'"></td>
-                    <td class="px-6 py-4 font-medium text-gray-900">${p.title}</td>
-                    <td class="px-6 py-4 text-gray-500">${p.category || 'General'}</td>
-                    <td class="px-6 py-4 font-bold">${App.formatMoney(p.price)}</td>
-                    <td class="px-6 py-4">${p.stock}</td>
-                    <td class="px-6 py-4 flex gap-2">
-                        <button onclick="editProduct(${p.id})" class="text-primary-600 hover:text-primary-800 font-medium">Edit</button>
-                        <button onclick="confirmDelete(${p.id})" class="text-red-500 hover:text-red-700 font-medium ml-2">Delete</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
+                products.forEach(p => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-gray-50';
+                    tr.innerHTML = `
+                        <td class="px-6 py-4"><img src="${p.image}" class="w-10 h-10 rounded object-cover bg-gray-100" onerror="this.src='https://placehold.co/100x100?text=NA'"></td>
+                        <td class="px-6 py-4 font-medium text-gray-900">${p.title}</td>
+                        <td class="px-6 py-4 text-gray-500">${p.category || 'General'}</td>
+                        <td class="px-6 py-4 font-bold">${App.formatMoney(p.price)}</td>
+                        <td class="px-6 py-4">${p.stock}</td>
+                        <td class="px-6 py-4 flex gap-2">
+                            <button onclick="editProduct(${p.id})" class="text-primary-600 hover:text-primary-800 font-medium">Edit</button>
+                            <button onclick="confirmDelete(${p.id})" class="text-red-500 hover:text-red-700 font-medium ml-2">Delete</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                console.error(e);
+                App.showToast("Error loading products");
+            }
         }
 
 
-        window.confirmDelete = function (id) {
+        window.confirmDelete = async function (id) {
             console.log('Attempting to delete product:', id);
             if (confirm('Are you sure you want to delete this product?')) {
-                DB.deleteProduct(Number(id));
-                renderProducts();
-                App.showToast('Product Deleted');
+                try {
+                    await DB.deleteProduct(Number(id));
+                    await renderProducts();
+                    App.showToast('Product Deleted');
+                } catch (e) {
+                    alert("Error deleting: " + e.message);
+                }
             }
         };
 
@@ -282,19 +295,22 @@
             openModal(id);
         };
 
-        window.openModal = function (id = null) {
+        window.openModal = async function (id = null) {
             document.getElementById('product-modal').classList.remove('hidden');
             if (id) {
-                const p = DB.getProduct(id);
-                document.getElementById('modal-title').textContent = 'Edit Product';
-                document.getElementById('p-id').value = p.id;
-                document.getElementById('p-title').value = p.title;
-                document.getElementById('p-category').value = p.category;
-                document.getElementById('p-price').value = p.price;
-                document.getElementById('p-stock').value = p.stock;
-                document.getElementById('p-offer-price').value = p.offerPrice || '';
-                document.getElementById('p-offer-date').value = p.offerExpires ? p.offerExpires.slice(0, 16) : '';
-                setPreview(p.image);
+                try {
+                    const p = await DB.getProduct(id);
+                    if (!p) return;
+                    document.getElementById('modal-title').textContent = 'Edit Product';
+                    document.getElementById('p-id').value = p.id;
+                    document.getElementById('p-title').value = p.title;
+                    document.getElementById('p-category').value = p.category;
+                    document.getElementById('p-price').value = p.price;
+                    document.getElementById('p-stock').value = p.stock;
+                    document.getElementById('p-offer-price').value = p.offer_price || '';
+                    document.getElementById('p-offer-date').value = p.offer_expires ? p.offer_expires.slice(0, 16) : '';
+                    setPreview(p.image);
+                } catch (e) { console.error(e); }
             } else {
                 document.getElementById('modal-title').textContent = 'Add Product';
                 document.getElementById('product-form').reset();
@@ -307,23 +323,27 @@
             document.getElementById('product-modal').classList.add('hidden');
         };
 
-        document.getElementById('product-form').addEventListener('submit', (e) => {
+        document.getElementById('product-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const id = document.getElementById('p-id').value;
             const product = {
-                id: id ? parseInt(id) : Date.now(),
+                id: id ? parseInt(id) : Date.now(), // DB handles new IDs, but passing timestamp for temp ID check
                 title: document.getElementById('p-title').value,
-                price: parseInt(document.getElementById('p-price').value),
+                price: parseFloat(document.getElementById('p-price').value),
                 stock: parseInt(document.getElementById('p-stock').value),
                 category: document.getElementById('p-category').value,
                 image: document.getElementById('p-image-base64').value || 'https://placehold.co/400x400?text=No+Image',
-                offerPrice: document.getElementById('p-offer-price').value ? parseInt(document.getElementById('p-offer-price').value) : null,
-                offerExpires: document.getElementById('p-offer-date').value ? new Date(document.getElementById('p-offer-date').value).toISOString() : null
+                offer_price: document.getElementById('p-offer-price').value ? parseFloat(document.getElementById('p-offer-price').value) : null,
+                offer_expires: document.getElementById('p-offer-date').value ? new Date(document.getElementById('p-offer-date').value).toISOString() : null
             };
-            DB.saveProduct(product);
-            closeModal();
-            renderProducts();
-            App.showToast('Product Saved');
+            try {
+                await DB.saveProduct(product);
+                closeModal();
+                await renderProducts();
+                App.showToast('Product Saved');
+            } catch (e) {
+                alert("Error saving: " + e.message);
+            }
         });
 
         renderProducts();
