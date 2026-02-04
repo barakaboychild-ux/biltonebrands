@@ -30,6 +30,8 @@
             }
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
     <script src="js/db.js"></script>
     <script src="js/main.js"></script>
 </head>
@@ -139,13 +141,20 @@
     </footer>
 
     <script>
-        // Load content from DB
-        const content = DB.getContent();
-        const contentDiv = document.getElementById('about-content');
-        contentDiv.innerHTML = content.aboutUs || '<p>No content available.</p>';
-
-        // Initialize
-        loadContent();
+            (async function () {
+                try {
+                    const content = await DB.getContent();
+                    const contentDiv = document.getElementById('about-content');
+                    if (content && content.aboutUs) {
+                        contentDiv.innerHTML = content.aboutUs;
+                    } else {
+                        contentDiv.innerHTML = '<p>No content available.</p>';
+                    }
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('about-content').innerText = "Error loading content.";
+                }
+            })();
     </script>
 </body>
 
