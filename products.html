@@ -30,6 +30,8 @@
             }
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
     <script src="js/db.js"></script>
     <script src="js/main.js"></script>
 </head>
@@ -155,22 +157,35 @@
         const grid = document.getElementById('products-grid');
         const searchInput = document.getElementById('search-input');
         const categoryFilter = document.getElementById('category-filter');
-        let allProducts = DB.getProducts();
+        let allProducts = [];
+
+        async function init() {
+            try {
+                allProducts = await DB.getProducts();
+                renderProducts(allProducts);
+            } catch (e) {
+                console.error(e);
+                grid.innerHTML = '<div class="col-span-full text-center text-red-500 py-12">Error loading products.</div>';
+            }
+        }
 
         function renderProducts(products) {
             grid.innerHTML = '';
-            if (products.length === 0) {
+            if (!products || products.length === 0) {
                 grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-12">No products found.</div>';
                 return;
             }
 
             products.forEach(product => {
-                const offer = DB.getActiveOffer(product.id);
-                const priceDisplay = offer
-                    ? `<span class="text-red-500 font-bold">${App.formatMoney(offer.discountPrice)}</span> <span class="text-gray-400 line-through text-sm">${App.formatMoney(product.price)}</span>`
-                    : `<span class="text-gray-900 font-bold">${App.formatMoney(product.price)}</span>`;
+                const hasOffer = product.offer_price && product.offer_expires && new Date(product.offer_expires) > new Date();
+                const offerPrice = parseFloat(product.offer_price);
+                const price = parseFloat(product.price);
 
-                const offerBadge = offer
+                const priceDisplay = hasOffer
+                    ? `<span class="text-red-500 font-bold">${App.formatMoney(offerPrice)}</span> <span class="text-gray-400 line-through text-sm">${App.formatMoney(price)}</span>`
+                    : `<span class="text-gray-900 font-bold">${App.formatMoney(price)}</span>`;
+
+                const offerBadge = hasOffer
                     ? `<div class="absolute top-2 left-2 bg-accent-pink text-white text-xs font-bold px-2 py-1 rounded">OFFER</div>`
                     : '';
 
@@ -202,7 +217,7 @@
             });
         }
 
-        function addToCartWithQty(id) {
+        window.addToCartWithQty = function (id) {
             const qtyInput = document.getElementById(`qty-${id}`);
             const qty = parseInt(qtyInput.value) || 1;
             const product = allProducts.find(p => p.id == id);
@@ -227,7 +242,7 @@
         categoryFilter.addEventListener('change', filterProducts);
 
         // Initial Render
-        renderProducts(allProducts);
+        init();
     </script>
 </body>
 
