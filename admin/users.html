@@ -8,6 +8,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="../js/tailwind.config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/config.js"></script>
     <script src="../js/db.js"></script>
     <script src="../js/main.js"></script>
 </head>
@@ -92,102 +94,112 @@
 
     <script>
         // Auth & Role Check
-        const user = JSON.parse(sessionStorage.getItem('biltone_session'));
+        const session = sessionStorage.getItem('biltone_session');
+        const user = session ? JSON.parse(session) : null;
         if (!user || user.role !== 'owner') {
             alert("Access Denied. Owner only.");
             window.location.href = 'dashboard.html';
         }
 
-        function renderUsers() {
-            const users = DB.getUsers();
-            if (user.role === 'owner') {
-                document.getElementById('users-link').classList.remove('hidden');
-                const contentLink = document.getElementById('content-link');
-                if (contentLink) contentLink.classList.remove('hidden');
-                const ordersLink = document.getElementById('orders-link');
-                if (ordersLink) ordersLink.classList.add('hidden');
+        async function renderUsers() {
+            try {
+                const users = await DB.getUsers();
+                if (user.role === 'owner') {
+                    document.getElementById('users-link').classList.remove('hidden');
+                    const contentLink = document.getElementById('content-link');
+                    if (contentLink) contentLink.classList.remove('hidden');
+                    const ordersLink = document.getElementById('orders-link');
+                    if (ordersLink) ordersLink.classList.add('hidden');
 
-                // Show Pending Updates Section
-                document.getElementById('pending-updates-section').classList.remove('hidden');
-                renderPendingUpdates();
+                    // Show Pending Updates Section
+                    document.getElementById('pending-updates-section').classList.remove('hidden');
+                    await renderPendingUpdates();
+                }
+                const tbody = document.getElementById('users-table');
+                tbody.innerHTML = '';
+
+                users.forEach(u => {
+                    const isMe = u.email === user.email;
+                    // Approved check: profiles table has 'approved' boolean
+                    const statusBadge = u.approved
+                        ? '<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700">Active</span>'
+                        : '<span class="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-700">Pending</span>';
+
+                    const actionBtn = !u.approved
+                        ? `<button onclick="approve('${u.email}')" class="text-primary-600 hover:underline font-bold">Approve</button>`
+                        : (isMe ? '<span class="text-gray-400">Current User</span>' : '<span class="text-gray-400">Approved</span>');
+
+                    const row = `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 font-medium text-gray-900">${u.full_name || u.name || 'N/A'}</td>
+                            <td class="px-6 py-4">${u.email}</td>
+                            <td class="px-6 py-4 capitalize">${u.role}</td>
+                            <td class="px-6 py-4">${statusBadge}</td>
+                            <td class="px-6 py-4">${actionBtn}</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) {
+                console.error(e);
             }
-            const tbody = document.getElementById('users-table');
-            tbody.innerHTML = '';
-
-            users.forEach(u => {
-                const isMe = u.email === user.email;
-                const statusBadge = u.approved
-                    ? '<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700">Active</span>'
-                    : '<span class="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-700">Pending</span>';
-
-                const actionBtn = !u.approved
-                    ? `<button onclick="approve('${u.email}')" class="text-primary-600 hover:underline font-bold">Approve</button>`
-                    : (isMe ? '<span class="text-gray-400">Current User</span>' : '<span class="text-gray-400">Approved</span>');
-
-                const row = `
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 font-medium text-gray-900">${u.name || 'N/A'}</td>
-                        <td class="px-6 py-4">${u.email}</td>
-                        <td class="px-6 py-4 capitalize">${u.role}</td>
-                        <td class="px-6 py-4">${statusBadge}</td>
-                        <td class="px-6 py-4">${actionBtn}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-            });
         }
 
-        window.approve = function (email) {
+        window.approve = async function (email) {
             if (confirm(`Approve admin access for ${email}?`)) {
-                DB.approveUser(email);
-                renderUsers();
+                await DB.approveUser(email);
+                await renderUsers();
             }
         };
 
-        window.renderPendingUpdates = function () {
-            const updates = DB.getPendingUpdates();
-            const tbody = document.getElementById('pending-updates-table');
-            tbody.innerHTML = '';
+        window.renderPendingUpdates = async function () {
+            try {
+                const updates = await DB.getPendingUpdates();
+                const tbody = document.getElementById('pending-updates-table');
+                tbody.innerHTML = '';
 
-            if (updates.length === 0) {
-                document.getElementById('pending-updates-section').classList.add('hidden');
-                return;
+                if (updates.length === 0) {
+                    document.getElementById('pending-updates-section').classList.add('hidden');
+                    return;
+                }
+                document.getElementById('pending-updates-section').classList.remove('hidden');
+
+                updates.forEach(update => {
+                    const changes = Object.entries(update.userData)
+                        .map(([key, val]) => `<strong>${key}:</strong> ${val}`)
+                        .join('<br>');
+
+                    const row = `
+                        <tr class="hover:bg-yellow-50">
+                            <td class="p-4">${update.email}</td>
+                            <td class="p-4 text-sm">${changes}</td>
+                            <td class="p-4 text-gray-500">${new Date(update.created_at || update.date).toLocaleDateString()}</td>
+                            <td class="p-4 flex gap-2">
+                                <button onclick="approveUpdate('${update.id}')" class="text-green-600 hover:text-green-800 font-bold text-sm">Approve</button>
+                                <button onclick="rejectUpdate('${update.id}')" class="text-red-500 hover:text-red-700 font-bold text-sm">Reject</button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) {
+                console.error(e);
             }
-            document.getElementById('pending-updates-section').classList.remove('hidden');
-
-            updates.forEach(update => {
-                const changes = Object.entries(update.userData)
-                    .map(([key, val]) => `<strong>${key}:</strong> ${val}`)
-                    .join('<br>');
-
-                const row = `
-                    <tr class="hover:bg-yellow-50">
-                        <td class="p-4">${update.email}</td>
-                        <td class="p-4 text-sm">${changes}</td>
-                        <td class="p-4 text-gray-500">${new Date(update.date).toLocaleDateString()}</td>
-                        <td class="p-4 flex gap-2">
-                            <button onclick="approveUpdate('${update.id}')" class="text-green-600 hover:text-green-800 font-bold text-sm">Approve</button>
-                            <button onclick="rejectUpdate('${update.id}')" class="text-red-500 hover:text-red-700 font-bold text-sm">Reject</button>
-                        </td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-            });
         };
 
-        window.approveUpdate = function (id) {
+        window.approveUpdate = async function (id) {
             if (confirm('Approve this profile update?')) {
-                DB.approveProfileUpdate(id);
-                renderPendingUpdates();
-                renderUsers();
+                await DB.approveProfileUpdate(id);
+                await renderPendingUpdates();
+                await renderUsers();
                 App.showToast('Update Approved');
             }
         };
 
-        window.rejectUpdate = function (id) {
+        window.rejectUpdate = async function (id) {
             if (confirm('Reject this profile update?')) {
-                DB.rejectProfileUpdate(id);
-                renderPendingUpdates();
+                await DB.rejectProfileUpdate(id);
+                await renderPendingUpdates();
                 App.showToast('Update Rejected');
             }
         };
