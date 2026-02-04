@@ -30,6 +30,8 @@
             }
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
     <script src="js/db.js"></script>
     <script src="js/main.js"></script>
 </head>
@@ -217,7 +219,7 @@
             totalDisplay.textContent = App.formatMoney(App.getCartTotal());
         }
 
-        checkoutForm.addEventListener('submit', (e) => {
+        checkoutForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (App.state.cart.length === 0) {
                 alert("Your cart is empty!");
@@ -234,25 +236,19 @@
                 total: App.getCartTotal()
             };
 
-            DB.createOrder(orderData);
-            App.clearCart();
-            renderCart();
-
-            // Show success and redirect
-            alert("Order Placed Successfully! We will contact you shortly.");
-            window.location.href = 'index.html';
+            try {
+                await DB.createOrder(orderData);
+                App.clearCart();
+                renderCart();
+                alert("Order Placed Successfully! We will contact you shortly.");
+                window.location.href = 'index.html';
+            } catch (error) {
+                alert("Failed to place order: " + error.message);
+            }
         });
 
         // Initial Render - Wait for App.init to load cart
         document.addEventListener('DOMContentLoaded', () => {
-            // Small delay to ensure App.init (which is also on DOMContentLoaded) runs first
-            // Or better, we can rely on the fact that scripts run in order. 
-            // Since main.js adds its listener first (it's included before this script block?), 
-            // actually main.js is included in head. 
-            // But listeners fire in order of registration. main.js is a file, this is inline.
-            // main.js registration happens when the file is parsed. 
-            // This inline script is parsed AFTER main.js. 
-            // So main.js listener should be registered BEFORE this one.
             renderCart();
         });
     </script>
