@@ -30,6 +30,8 @@
             }
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
     <script src="js/db.js"></script>
     <script src="js/main.js"></script>
 </head>
@@ -92,15 +94,19 @@
                 </button>
             </form>
             <script>
-                function handleContact(e) {
+                async function handleContact(e) {
                     e.preventDefault();
                     const name = document.getElementById('c-name').value;
                     const email = document.getElementById('c-email').value;
                     const message = document.getElementById('c-message').value;
 
-                    DB.saveMessage({ name, email, message });
-                    App.showToast('Message sent! We will contact you shortly.');
-                    e.target.reset();
+                    try {
+                        await DB.saveMessage({ name, email, message });
+                        App.showToast('Message sent! We will contact you shortly.');
+                        e.target.reset();
+                    } catch (error) {
+                        alert("Failed to send message: " + error.message);
+                    }
                 }
             </script>
         </div>
